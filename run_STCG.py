@@ -11,7 +11,7 @@ SYMBOL = "COLPAL"
 FILENAME = "./data/"+SYMBOL+".csv"
 
 dfs = []
-TAKEPROFIT = 10
+TAKEPROFIT = 5
 CAPITAL = 5000
 
 # Import the OHCL data
@@ -75,8 +75,27 @@ for idx, trade in boughtTrades.iterrows():
 boughtTrades['BoughtOnDate'] = pd.to_datetime(boughtTrades['BoughtOnDate'], utc=True)
 boughtTrades['SoldOnDate'] = pd.to_datetime(boughtTrades['SoldOnDate'], utc=True)
 boughtTrades['InvestmentDays'] = (boughtTrades['SoldOnDate'] - boughtTrades['BoughtOnDate']).dt.days
+boughtTrades[['SoldAtPrice', 'BoughtAtPrice']] = boughtTrades[['SoldAtPrice', 'BoughtAtPrice']].apply(pd.to_numeric)
+boughtTrades['GrossPL'] = (boughtTrades['SoldAtPrice'] - boughtTrades['BoughtAtPrice']) * boughtTrades['Qty']
 
-# boughtTrades.to_csv("./df.csv")
+profitDF = boughtTrades[~boughtTrades['InvestmentDays'].isna()].copy()
+profitDF['Utilized'] = ''
+profitDF.drop(['BoughtOnDate', 'BoughtAtPrice', 'Qty', 'SoldAtPrice', 'InvestmentDays'], axis=1, inplace=True)
+profitDF = profitDF.sort_values(by='SoldOnDate')
+profitDF = profitDF.reset_index(drop=True)
+
+# Logic for profit re-investment - Starts
+for k, trd in boughtTrades.iterrows():
+    tempDF = profitDF[(profitDF['SoldOnDate'] < trd['BoughtOnDate']) & (profitDF['Utilized'] == '')]
+    if(len(tempDF.index) > 0):
+        NEW_CAPITAL = CAPITAL + round(tempDF['GrossPL'].sum())
+        NEW_QTY = round(NEW_CAPITAL / trd['BoughtAtPrice'])
+        if(NEW_QTY == trd['Qty']):
+            continue
+        else:
+            boughtTrades.at[k, 'Qty'] = round(NEW_CAPITAL / trd['BoughtAtPrice'])
+            profitDF.at[tempDF.index, 'Utilized'] = 'X'
+# Logic for profit re-investment - Ends
 
 ledger = pd.DataFrame(columns=['TransactionDate','Price', 'Qty','Action','WalletBalance'])
 
@@ -117,4 +136,8 @@ report['PAT (%)'] = round((report['PAT'] * 100) / report['MaxCapital'])
 # report = report.append({}, ignore_index=True)
 
 report.to_csv('./STCG_'+str(TAKEPROFIT)+'_percent_'+SYMBOL+'.csv')
+print(report)
 print("(3/3) - Report Generated.")
+
+print("Max Capital Consumed = "+str(report['MaxCapital'].max()))
+print("TOTAL PAT = "+str(report['PAT'].sum()))
