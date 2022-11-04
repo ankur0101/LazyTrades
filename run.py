@@ -1,14 +1,19 @@
-#  Monday Buying
+# This program backtests a Lazy investment idea that buys
+# a specific stock every Monday and sells at a constant percentage
+# in gain.
+# The weekly capital is constant across all trades
 
 from os import listdir
 from os.path import isfile, join
 import pandas as pd
-FILENAME = "./data/COLPAL.csv"
+SYMBOL = "COLPAL"
+FILENAME = "./data/"+SYMBOL+".csv"
 
 dfs = []
 TAKEPROFIT = 10
 CAPITAL = 5000
 
+# Import the OHCL data
 df = pd.read_csv(FILENAME)
 
 # Delete unwanted columns
@@ -21,14 +26,15 @@ df['Date'] = pd.to_datetime(df['Date'])
 df = df.drop_duplicates(subset=['Date'])
 df = df.sort_values(by='Date')
 
-# df['weekday'] = datetime.datetime(2022, 10, 17).weekday() 
+# Mark the day of week in numbers, starting Monday = 0
 df['weekday'] = df['Date'].dt.dayofweek
 
 #Optional
 df = df[df['Date'].dt.year > 2015]
 
+#Convert Columns to numeric types
 df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].apply(pd.to_numeric)
-df['weekstart'] = ''
+df['weekstart'] = pd.Series(dtype=bool)
 df = df.reset_index(drop=True)
 
 for index, row in df.iterrows():
@@ -43,6 +49,9 @@ boughtTrades['SoldAtPrice'] = ''
 boughtTrades['GrossPL'] = ''
 boughtTrades.rename(columns = {'Date':'BoughtOnDate', 'Open':'BoughtAtPrice'}, inplace = True)
 boughtTrades.drop(['High', 'Low', 'Close', 'weekday', 'weekstart'], axis=1, inplace=True)
+boughtTrades['BoughtOnDate'] = pd.to_datetime(df['Date'])
+boughtTrades = boughtTrades.reset_index(drop=True)
+boughtTrades = boughtTrades.sort_values(by='BoughtOnDate')
 
 for idx, trade in boughtTrades.iterrows():
     targetPrice = round(trade['BoughtAtPrice'] + (trade['BoughtAtPrice'] * TAKEPROFIT / 100), 2)
@@ -80,7 +89,7 @@ for indexx, tradee in boughtTrades.iterrows():
     ledger = ledger.append(SellRow, ignore_index = True)
 
 ledger = ledger[~ledger['TransactionDate'].isna()].sort_values(by='TransactionDate')
-print("Ledger compilation completed")
+print("(1/3) - Ledger compilation completed")
 
 # Simulate Trades
 ledger = ledger.reset_index(drop=True)
@@ -90,24 +99,26 @@ for ii, transaction in ledger.iterrows():
         ledger.at[ii,'WalletBalance'] = round(transaction['Price'] * transaction['Qty'] * (-1 if transaction['Action'] == 'BUY' else 1))
     else:
         ledger.at[ii,'WalletBalance'] = round(ledger.iloc[ii-1]['WalletBalance'] + transaction['Price'] * transaction['Qty'] * (-1 if transaction['Action'] == 'BUY' else 1))
-print("Trade Simulation completed")
+print("(2/3) - Trade Simulation completed)")
 
-
+# Build a report
 report = pd.DataFrame({'Years': ledger['TransactionDate'].dt.year.unique(), 'MaxCapital': '', 'RealizedGain': '', 'UnrealizedGain': ''})
-
 for y, line in report.iterrows():
-    report.at[y, 'MaxCapital'] = ledger[ledger['TransactionDate'].dt.year == line['Years']]['WalletBalance'].min() * -1
+    report.at[y, 'MaxCapital'] = ledger[(ledger['TransactionDate'].dt.year == line['Years']) * (ledger['Action'] == 'BUY')]['WalletBalance'].min() * -1
 
-    RealizedGainDF = boughtTrades[(boughtTrades['BoughtOnDate'].dt.year == line['Years']) & (~boughtTrades['InvestmentDays'].isna())]
+    RealizedGainDF = boughtTrades[(boughtTrades['SoldOnDate'].dt.year == line['Years']) & (~boughtTrades['InvestmentDays'].isna())]
     report.at[y, 'RealizedGain'] = round(((RealizedGainDF['SoldAtPrice'] - RealizedGainDF['BoughtAtPrice']) * RealizedGainDF['Qty']).sum())
 
     UnrealizedGainDF = boughtTrades[(boughtTrades['BoughtOnDate'].dt.year == line['Years']) & (boughtTrades['InvestmentDays'].isna())]
     report.at[y, 'UnrealizedGain'] = round(((UnrealizedGainDF['BoughtAtPrice'] * UnrealizedGainDF['Qty']) * 0.05).sum())
 
 report[["RealizedGain", "MaxCapital"]] = report[["RealizedGain", "MaxCapital"]].apply(pd.to_numeric)
-report['PAT'] = (report['RealizedGain'] + report['UnrealizedGain']) - ((report['RealizedGain'] + report['UnrealizedGain'])*15/100)
-report['Percentage_PBT'] = round((report['RealizedGain'] * 100) / report['MaxCapital'])
-report['Percentage_PAT'] = round((report['PAT'] * 100) / report['MaxCapital'])
+report['PAT'] = (report['RealizedGain']) - ((report['RealizedGain'] + report['UnrealizedGain'])*15/100)
+report['PAT'] = report['PAT'].apply(pd.to_numeric)
+report['PAT (%)'] = round((report['PAT'] * 100) / report['MaxCapital'])
 
-report.to_csv('./'+str(TAKEPROFIT)+'_percent.csv')
-print("Report Generated.")
+# report = report.append({'MaxCapital': report['MaxCapital'].max(), 'RealizedGain': report['RealizedGain'].sum(), 'UnrealizedGain': report['UnrealizedGain'].sum(), 'PAT': report['PAT'].sum()}, ignore_index=True)
+# report = report.append({}, ignore_index=True)
+
+report.to_csv('./STCG_'+str(TAKEPROFIT)+'_percent_'+SYMBOL+'.csv')
+print("(3/3) - Report Generated.")
