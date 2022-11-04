@@ -1,7 +1,8 @@
 # This program backtests a Lazy investment idea that buys
 # a specific stock every Monday and sells at a constant percentage
-# in gain.
-# The weekly capital is constant across all trades
+# in gain. It does deduct Short term capital gain tax of 15% in final reports.
+# The weekly capital is constant across all trades.
+# This is an unoptimized version of python code.
 
 from os import listdir
 from os.path import isfile, join
@@ -54,10 +55,7 @@ boughtTrades = boughtTrades.reset_index(drop=True)
 boughtTrades = boughtTrades.sort_values(by='BoughtOnDate')
 
 for idx, trade in boughtTrades.iterrows():
-    targetPrice = round(trade['BoughtAtPrice'] + (trade['BoughtAtPrice'] * TAKEPROFIT / 100), 2)
-    
-    # print(trade['BoughtOnDate'])
-    # exit()
+    targetPrice = round(trade['BoughtAtPrice'] + (trade['BoughtAtPrice'] * TAKEPROFIT / 100), 2)    
 
     sellTrade = None
     sellTrade = df.loc[(df['High'] >= targetPrice) & (df['Date'] > trade['BoughtOnDate'])]
