@@ -93,10 +93,8 @@ print("(1/3) - Ledger compilation completed")
 ledger = ledger.reset_index(drop=True)
 ledger[["WalletBalance"]] = ledger[["WalletBalance"]].apply(pd.to_numeric)
 for ii, transaction in ledger.iterrows():
-    if(ii == 0):
-        ledger.at[ii,'WalletBalance'] = round(transaction['Price'] * transaction['Qty'] * (-1 if transaction['Action'] == 'BUY' else 1))
-    else:
-        ledger.at[ii,'WalletBalance'] = round(ledger.iloc[ii-1]['WalletBalance'] + transaction['Price'] * transaction['Qty'] * (-1 if transaction['Action'] == 'BUY' else 1))
+    ledger.at[ii,'WalletBalance'] = round((0 if ii == 0 else ledger.iloc[ii-1]['WalletBalance']) + transaction['Price'] * transaction['Qty'] * (-1 if transaction['Action'] == 'BUY' else 1))
+
 print("(2/3) - Trade Simulation completed)")
 
 # Build a report
